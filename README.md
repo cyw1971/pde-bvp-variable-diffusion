@@ -9,6 +9,7 @@ Conservative face-averaged five-point FDM for \(-\nabla\cdot(a\nabla u)=f\) on t
 | File / folder | Role |
 |---|---|
 | `chuyang_wang2363591.pdf` | Report PDF (AI log + ICS) |
+| `report/main.tex` | LaTeX source (compile from `report/` with figures in `../figures/`) |
 | `code/` | Assembly, solvers, verification, `run_all.py` |
 | `figures/` | Report figures (regenerate with `run_all.py`) |
 | `requirements.txt` | Python dependencies |
