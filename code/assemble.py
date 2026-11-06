@@ -26,19 +26,24 @@ def k_index(i, j, n):
 def face_coefficient(a_fun, x, y, di, dj, h, mode, x_neigh, y_neigh):
     """Positive shared coefficient on the face between (x,y) and its neighbour."""
     if mode == "halfpoint":
-        return float(np.asarray(a_fun(x + 0.5 * di * h, y + 0.5 * dj * h)))
-    a_here = float(np.asarray(a_fun(x, y)))
-    a_there = float(np.asarray(a_fun(x_neigh, y_neigh)))
-    if mode == "arithmetic":
-        return 0.5 * (a_here + a_there)
-    if mode == "harmonic":
-        return 2.0 * a_here * a_there / (a_here + a_there)
-    raise ValueError(f"unknown face mode {mode!r}")
+        val = np.asarray(a_fun(x + 0.5 * di * h, y + 0.5 * dj * h), dtype=float)
+    else:
+        a_here = np.asarray(a_fun(x, y), dtype=float)
+        a_there = np.asarray(a_fun(x_neigh, y_neigh), dtype=float)
+        if mode == "arithmetic":
+            val = 0.5 * (a_here + a_there)
+        elif mode == "harmonic":
+            val = 2.0 * a_here * a_there / (a_here + a_there)
+        else:
+            raise ValueError(f"unknown face mode {mode!r}")
+    out = np.broadcast_to(val, np.broadcast(x, y).shape).astype(float)
+    return float(out) if out.ndim == 0 else out
 
 
 def assemble(n, problem=P4, face_mode="halfpoint"):
     """Return (A, b, h, axis) for n interior nodes per direction.
 
+    Vectorised COO assembly (no Python loops over grid nodes).
     Stencil:
         (A U)_ij = (1/h^2) [ a_E(U-U_E)+a_W(U-U_W)+a_N(U-U_N)+a_S(U-U_S) ]
     Dirichlet neighbour at (x_e,y_e) with value g:
@@ -47,37 +52,43 @@ def assemble(n, problem=P4, face_mode="halfpoint"):
     """
     axis, X, Y, h = grid_from_n(n)
     inv_h2 = 1.0 / h**2
-    b = np.asarray(problem.forcing(X, Y), dtype=float).ravel()
+    b_grid = np.broadcast_to(
+        np.asarray(problem.forcing(X, Y), dtype=float), (n, n)
+    ).copy()
+    diag = np.zeros((n, n), dtype=float)
+    I, J = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    K = k_index(I, J, n)
     rows, cols, data = [], [], []
     a_fun = problem.coefficient
 
-    for i in range(n):
-        for j in range(n):
-            kk = k_index(i, j, n)
-            x_ij, y_ij = axis[i], axis[j]
-            diag = 0.0
-            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                x_e = x_ij + di * h
-                y_e = y_ij + dj * h
-                a_face = face_coefficient(
-                    a_fun, x_ij, y_ij, di, dj, h, face_mode, x_e, y_e
-                )
-                coef = a_face * inv_h2
-                diag += coef
-                ii, jj = i + di, j + dj
-                if 0 <= ii < n and 0 <= jj < n:
-                    rows.append(kk)
-                    cols.append(k_index(ii, jj, n))
-                    data.append(-coef)
-                else:
-                    g = float(np.asarray(problem.exact(x_e, y_e)))
-                    b[kk] += coef * g
-            rows.append(kk)
-            cols.append(kk)
-            data.append(diag)
+    for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        X_e = X + di * h
+        Y_e = Y + dj * h
+        coef = (
+            face_coefficient(a_fun, X, Y, di, dj, h, face_mode, X_e, Y_e) * inv_h2
+        )
+        diag += coef
+        II, JJ = I + di, J + dj
+        interior = (II >= 0) & (II < n) & (JJ >= 0) & (JJ < n)
+        rows.append(K[interior].ravel())
+        cols.append(k_index(II[interior], JJ[interior], n).ravel())
+        data.append((-coef[interior]).ravel())
+        bdry = ~interior
+        if np.any(bdry):
+            G = np.broadcast_to(
+                np.asarray(problem.exact(X_e, Y_e), dtype=float), (n, n)
+            )
+            b_grid[bdry] += coef[bdry] * G[bdry]
 
-    A = coo_matrix((data, (rows, cols)), shape=(n * n, n * n)).tocsr()
-    return A, b, h, axis
+    rows.append(K.ravel())
+    cols.append(K.ravel())
+    data.append(diag.ravel())
+
+    A = coo_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n * n, n * n),
+    ).tocsr()
+    return A, b_grid.ravel(), h, axis
 
 
 def reshape_field(uh, n):

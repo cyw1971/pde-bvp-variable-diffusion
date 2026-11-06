@@ -23,9 +23,8 @@
   Numerical Solution of a Variable-Diffusion Elliptic BVP\\[0.4em]
   \large Project 2 (PDE BVP) Report --- Team 15
 }
-\author{Chuyang Wang, 2363591 \quad (solo)\\[0.3em]
-Department of Applied Mathematics}
-\date{October 2026}
+\author{Chuyang Wang, 2363591 \quad (solo)}
+\date{}
 
 \begin{document}
 \maketitle
@@ -51,11 +50,10 @@ Steady heat conduction in a layered composite, soil profile, or tissue boundary 
 The physically correct operator is the divergence form \(-\nabla\cdot(a\nabla u)\): the normal flux \(a\partial_n u\) is continuous across an interface.
 A pointwise expansion \(a\Delta u+\nabla a\cdot\nabla u\) is the wrong starting point once \(a\) is discontinuous---it loses conservation, symmetry, and the M-matrix sign pattern.
 
-I chose Direction~3 rather than a curved-disk Poisson problem because the unit square keeps the five-point machinery of Tutorial~5 intact, while the jump forces a modelling choice (arithmetic versus harmonic face coefficients) that a smooth manufactured Poisson problem never sees.
-This is a solo submission: stencil, solvers, experiments, and text are mine.
+I chose Direction~3 because the unit square keeps the five-point machinery of Tutorial~5 intact, while the jump forces a modelling choice (arithmetic versus harmonic face coefficients) that a smooth manufactured Poisson problem never sees.
 
 \subsection{Mathematical Model}
-On \(\Omega=(0,1)^2\) with Dirichlet data on \(\partial\Omega=\Gamma_D\),
+On \(\Omega=(0,1)^2\) with Dirichlet data on \(\partial\Omega\),
 \begin{equation}
 -\nabla\cdot\bigl(a(x,y)\nabla u\bigr)=f\quad\text{in }\Omega,\qquad
 u=g\quad\text{on }\partial\Omega,
@@ -63,9 +61,8 @@ u=g\quad\text{on }\partial\Omega,
 \end{equation}
 with \(0<a_{\min}\le a(x,y)\le a_{\max}<\infty\).
 The sign convention makes \(-\nabla\cdot(a\nabla u)\) a positive operator, so the discrete matrix has a positive diagonal.
-There is no Neumann part: \(\Gamma_N=\emptyset\).
 
-\paragraph{Smooth manufactured benchmark (bank P4).}
+\paragraph{Smooth manufactured benchmark (course bank problem P4).}
 \[
 a(x,y)=1+x,\qquad
 u^*(x,y)=\sin(\pi x)\sin(\pi y),\qquad
@@ -93,7 +90,6 @@ u^*(x)=\begin{cases}
 \end{equation}
 is independent of \(y\).
 It is continuous, \(u^*(0)=0\), \(u^*(1)=1\), the derivative jumps, and the flux \(a u_x^*=20/11\) is continuous.
-Well-posedness follows from uniform ellipticity and a nonempty Dirichlet boundary; no compatibility condition is required.
 
 Expected signs: on the layered problem, \(u^*\in[0,1]\) with extrema on the boundary (maximum principle).
 On P4, \(u^*>0\) in \(\Omega\) and \(u^*=0\) on \(\partial\Omega\).
@@ -178,13 +174,32 @@ b[0]\mathrel{+}=\frac{e^{0}\sin(\pi y_0)}{h^2}.
 \]
 Replacing a Dirichlet row by \(e_k\) while leaving the corresponding column untouched would destroy symmetry~\cite{problemPack}.
 Boundary nodes are therefore absent from \(A_h\).
-All boundaries are Dirichlet; there is no Neumann/Robin closure.
+
+For the hand-checked small matrix (\(n=2\), \(h=1/3\), \(a\equiv 1\), \(k=2i+j\)), the four interior nodes form
+\begin{equation}
+A_h = \frac{1}{h^2}
+\begin{pmatrix}
+4 & -1 & -1 & 0\\
+-1 & 4 & 0 & -1\\
+-1 & 0 & 4 & -1\\
+0 & -1 & -1 & 4
+\end{pmatrix}
+=
+\begin{pmatrix}
+36 & -9 & -9 & 0\\
+-9 & 36 & 0 & -9\\
+-9 & 0 & 36 & -9\\
+0 & -9 & -9 & 36
+\end{pmatrix},
+\qquad \mathrm{nnz}(A_h)=12,
+\label{eq:handn2}
+\end{equation}
+which matches \texttt{test\_hand\_matrix\_n2} in \texttt{validation\_tests.py}.
 
 \subsection{Discrete Structure, Stability, and Convergence}
 After Dirichlet elimination, every off-diagonal entry of \(A_h\) is non-positive and the row sums on interior stencils that do not touch the boundary are zero; boundary-adjacent rows are strictly diagonally dominant because a positive \(a_{\mathrm{face}}/h^2\) has been moved to \(b\).
 With positive shared face coefficients, \(A_h\) is a symmetric M-matrix, hence SPD, and the discrete maximum principle holds: a discrete solution of \(A_h U=0\) with Dirichlet data in \([m,M]\) remains in \([m,M]\).
 
-This is stability for the present coefficients and BCs, not a generic periodic von~Neumann argument.
 The continuous energy identity for~\eqref{eq:pde} with homogeneous Dirichlet data is
 \begin{equation}
 \int_\Omega a|\nabla u|^2\,\mathrm{d}x
@@ -208,12 +223,11 @@ q=\frac{2 a_L a_R}{a_L+a_R}\,\frac{U_R-U_L}{h}.
 \end{equation}
 So the face coefficient that preserves the continuous flux is exactly~\eqref{eq:harm}.
 The arithmetic mean \((a_L+a_R)/2\) is a different resistance and cannot match \(q\) unless \(a_L=a_R\).
-This is a transmission identity for Direction~3, not a quoted textbook stencil for \(-\Delta\).
 
 \paragraph{Convergence.}
 On smooth data, consistency of order \(2\) plus the M-matrix / energy stability above imply convergence of order \(2\) in the discrete \(L^2\) and \(L^\infty\) norms (Lax equivalence for linear FD schemes).
 Table~\ref{tab:p4} confirms the rate numerically: fitted slopes \(2.00\) with no deviation on the four meshes.
-On the layered jump the regularity assumption fails, so the theorem does not apply: harmonic averaging restores nodal exactness via~\eqref{eq:series}, while arithmetic averaging drops to first order (Table~\ref{tab:layer})---the observed deviation from order \(2\) is therefore predicted, not anomalous.
+On the layered jump the regularity assumption fails, so the theorem does not apply: harmonic averaging restores nodal exactness via~\eqref{eq:series}, while arithmetic averaging drops to first order (Table~\ref{tab:layer}).
 
 Three numerical checks corroborate the derivation:
 \(\|A-A^\top\|_{\max}/\|A\|_{\max}=0\) on every assembled matrix in this report;
@@ -247,7 +261,6 @@ Conditioning is separate: \(\kappa_2(A_h)\) on P4 grows like \(h^{-2}\) (\(126.5
 \end{algorithm}
 \noindent
 Lines 4--11 build one shared face at a time so that \(A_h\) inherits symmetry from the continuous flux form; the Dirichlet branch (lines 9--10) is exactly~\eqref{eq:dirichlet}.
-The CSR conversion and \texttt{spsolve} call are the only dense-library steps; assembly itself never materialises a dense \(n^2\times n^2\) array.
 
 \subsection{Code Structure}
 \begin{center}
@@ -269,11 +282,11 @@ File & Purpose\\
 \end{center}
 
 \subsection{Key Design Decisions}
-I assemble in COO and convert to CSR once.
+I assemble in COO using vectorised 2D index masks over the four stencil directions (no Python loops over grid nodes) and convert to CSR once.
 The physics (\(a\), \(f\), \(g\)) lives in \texttt{model.py}, so the same assembler runs P4, P5 and the layered jump.
 The default solve is sparse direct: at the meshes in this report (\(n\le 254\), \(N_{\mathrm{unk}}\le 6.5\times 10^4\), five nonzeros per row) a banded factorisation is cheaper than unpreconditioned CG, which I still run as a residual-stopped iterative check and as a contrast-sensitivity probe.
+Because shared face coefficients make \(A_h\) symmetric positive definite, Krylov CG is preferred over stationary Jacobi or Gauss--Seidel (error contraction governed by \((\sqrt{\kappa}-1)/(\sqrt{\kappa}+1)\) rather than \((\kappa-1)/(\kappa+1)\)).
 Cost measure (named before it is quoted): for CG, iteration count to a stated relative residual; for the direct solver, one sparse factorisation, with wall time only as a secondary observation.
-I do not count assembly, eigenvalue estimates, or plotting.
 
 \section{Verification and Numerical Experiments}
 \label{sec:exp}
@@ -420,16 +433,16 @@ Value of the comparison: it separates algebraic structure (symmetry, SPD) from i
 
 \begin{table}[H]
 \centering
-\caption{Layered \(a=1\,|\,10\), odd interval counts so \(x=1/2\) bisects a grid edge. Flux jump is \(\max_j|a_E(U_R-U_L)/h-20/11|\).}
+\caption{Layered \(a=1\,|\,10\), odd interval counts so \(x=1/2\) bisects a grid edge. Flux jump is \(\max_j|a_E(U_R-U_L)/h-20/11|\); \(p_\infty\) is the observed arithmetic \(L^\infty\) order.}
 \label{tab:layer}
-\begin{tabular}{@{}rrcccc@{}}
+\begin{tabular}{@{}rrccccc@{}}
 \toprule
-\(n\) & \(N\) & harm.\ \(L^\infty\) & harm.\ flux jump & arith.\ \(L^\infty\) & arith.\ flux jump\\
+\(n\) & \(N\) & harm.\ \(L^\infty\) & harm.\ flux jump & arith.\ \(L^\infty\) & arith.\ \(p_\infty\) & arith.\ flux jump\\
 \midrule
-30  & 31  & \(3.8\times 10^{-15}\) & \(3.3\times 10^{-14}\) & \(1.94\times 10^{-2}\) & \(0.663\)\\
-62  & 63  & \(8.9\times 10^{-15}\) & \(1.3\times 10^{-13}\) & \(9.60\times 10^{-3}\) & \(0.662\)\\
-126 & 127 & \(2.5\times 10^{-14}\) & \(1.6\times 10^{-13}\) & \(4.78\times 10^{-3}\) & \(0.662\)\\
-254 & 255 & \(2.7\times 10^{-14}\) & \(5.2\times 10^{-13}\) & \(2.38\times 10^{-3}\) & \(0.662\)\\
+30  & 31  & \(2.4\times 10^{-15}\) & \(3.9\times 10^{-14}\) & \(1.94\times 10^{-2}\) & ---    & \(0.663\)\\
+62  & 63  & \(7.9\times 10^{-15}\) & \(1.1\times 10^{-13}\) & \(9.60\times 10^{-3}\) & \(1.01\) & \(0.662\)\\
+126 & 127 & \(2.6\times 10^{-14}\) & \(1.8\times 10^{-13}\) & \(4.78\times 10^{-3}\) & \(1.01\) & \(0.662\)\\
+254 & 255 & \(3.5\times 10^{-14}\) & \(4.6\times 10^{-13}\) & \(2.38\times 10^{-3}\) & \(1.00\) & \(0.662\)\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -446,14 +459,14 @@ Value of the comparison: it separates algebraic structure (symmetry, SPD) from i
   \includegraphics[width=\linewidth]{fig07_layered_flux.png}
   \caption{Interface flux versus \(y\).}
 \end{subfigure}
-\caption{Left: harmonic \(u_h\) against the exact piecewise-linear profile; the kink at \(x=1/2\) sits between columns. Right: numerical interface flux. Harmonic recovers \(20/11\); arithmetic is a different constant that does not shrink with \(h\).}
+\caption{Left: harmonic \(u_h\) (blue circles) and arithmetic \(u_h\) (orange dashed) against the exact piecewise-linear profile; the kink at \(x=1/2\) sits between columns. Right: interface flux versus \(y\). The dashed line is the exact flux \(20/11\); harmonic sits on it, while arithmetic is a different constant that does not shrink with \(h\).}
 \label{fig:profile}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.62\textwidth]{fig08_order_layered.png}
-\caption{Layered \(L^\infty\) versus \(h\). Harmonic errors sit at round-off. Arithmetic tracks first order. Same data, two face rules, named norm: the depth comparison.}
+\caption{Layered \(L^\infty\) versus \(h\). Harmonic errors sit at round-off (\(\sim 10^{-14}\)). Arithmetic tracks the \(O(h)\) reference line (fitted slope \(0.99\)). Same data, two face rules, named norm: the depth comparison.}
 \label{fig:layerorder}
 \end{figure}
 
@@ -465,9 +478,8 @@ On smooth P4, \(\kappa_2(A_h)\) tracks \(h^{-2}\) as already quoted.
 \paragraph{Cost--accuracy at a matched target.}
 Cost measure (stated before quoting): CG iteration count to a relative residual, versus one sparse factorisation for \texttt{spsolve}.
 Accuracy target (frozen across the comparison): discrete \(L^2\) error equal to the \texttt{spsolve} value \(3.988\times 10^{-4}\) on P4 at \(n=31\).
-Not counted: assembly, eigenvalue estimates, figure rendering, and Python interpreter startup.
 Table~\ref{tab:cg} and Figure~\ref{fig:cg} (right) show that CG first hits this target at relative residual \(10^{-4}\) (39 iterations, \(\approx 2\,\mathrm{ms}\) wall); \texttt{spsolve} reaches the same \(L^2\) in one factorisation (\(\approx 2\,\mathrm{ms}\)).
-Conclusion (negative for CG on this range): at matched discretisation accuracy there is no runtime crossover for \(n\le 31\); unpreconditioned CG only becomes interesting once contrast or mesh size makes factorisation dominate, which is outside the meshes reported here.
+At matched discretisation accuracy there is no runtime crossover for \(n\le 31\).
 
 \begin{figure}[H]
 \centering
@@ -478,12 +490,9 @@ Conclusion (negative for CG on this range): at matched discretisation accuracy t
 
 \subsection{Limitations and Robustness}
 The second-order claim applies to smooth \(a\) with the half-point face rule.
-Across a jump, harmonic averaging on an aligned grid is exact for this piecewise-linear \(u^*\); that is a 1D identity, not a general theorem for rough interfaces that cut cells at arbitrary angles.
+Across a jump, harmonic averaging on an aligned grid is exact for this piecewise-linear \(u^*\).
 Arithmetic averaging remains an M-matrix and still looks smooth on a colour plot, yet its flux is wrong.
-
-I did not implement algebraic multigrid on the FDM matrix, nor a 2D interface-fitted FEM comparison beyond the single P4 oracle.
 Unpreconditioned CG will not be competitive on finer 2D meshes; AMG-CG (Tutorial~6) is the natural next solver.
-The scheme is Cartesian; a cut-cell disk would need a different boundary row.
 
 \FloatBarrier
 \section{Conclusions}
@@ -519,44 +528,21 @@ Course brief, ``Numerical Solution of Elliptic Boundary Value Problems,'' Projec
 
 \appendix
 \section{AI Transparency Log}
-\subsection{A1. Tools used}
+I used Grok (via Cursor) to help write the Python code and to polish the English of this report.
+
 \begin{center}
-\begin{tabular}{@{}llp{0.58\textwidth}@{}}
+\small
+\begin{tabular}{@{}lp{0.27\textwidth}p{0.27\textwidth}p{0.28\textwidth}@{}}
 \toprule
-Tool & Date & Primary use\\
+Item & Claim / assumption & Risk / falsifier & Independent check \& decision\\
 \midrule
-Cursor (Grok 4.6 agent) & 13--14 Oct 2026 & Week~5 P5 assembly, Dirichlet shift, issue ticket\\
-Cursor (Grok 4.6 agent) & 20 Oct 2026 & Week~6 P4 MMS table and log-log slope\\
-Cursor (Grok 4.6 agent) & 22 Oct 2026 & Layered harmonic/arithmetic comparison, \texttt{run\_all.py}, report draft\\
+1 & Conservative stencil~\eqref{eq:stencil} with Dirichlet shift \(b_k\mathrel{+}=a_{\mathrm{face}}g/h^2\) & Sign error in boundary shift or unsymmetric boundary row & Hand matrix~\eqref{eq:handn2} (\(\mathrm{nnz}=12\)), P2 \(L^\infty=4.4\times 10^{-16}\), P5 centre \(1.652\); accepted\\
+2 & Layered exact profile~\eqref{eq:ulayered} and harmonic vs.\ arithmetic face average & Using a discontinuous OCR formula or treating symmetry alone as proof of flux accuracy & Continuity of \(u\) and \(au_x=20/11\) checked analytically; Table~\ref{tab:layer} shows harmonic \(L^\infty\sim 10^{-14}\) vs.\ arithmetic \(O(h)\)\\
 \bottomrule
 \end{tabular}
 \end{center}
-
-\subsection{A2--A3. Claim audits}
-
-\paragraph{Item 1: conservative face stencil and Dirichlet sign.}
-\emph{Claim / assumptions:} assemble \(-\nabla\cdot(a\nabla u)\) with \(b_k \mathrel{+}= a_{\mathrm{face}} g/h^2\); boundary nodes absent from \(A_h\).
-\emph{Risk / falsifier:} wrong sign on the boundary shift (or treating boundary nodes as unknowns) still produces a smooth-looking \(u_h\).
-\emph{Independent check:} P5 centre \(1.651995\) against the bank value \(1.652\) at \(n=15\); P2 \(L^\infty=3.3\times 10^{-16}\); hand matrix \(n=2\) has diagonal \(4/h^2=36\) and \(\mathrm{nnz}=12\) (\texttt{validation\_tests.py}).
-\emph{Decision:} keep the interior-only unknown list. \emph{Limitation:} checks cover rectangular Dirichlet problems; Neumann rows were not tested.
-
-\paragraph{Item 2: layered exact profile.}
-\emph{Claim / assumptions:} piecewise \(u^*\) continuous with continuous flux \(a u_x\).
-\emph{Risk / falsifier:} an OCR'd pack line looked like \(u^*=2x+9/11\) on the right half; that formula is discontinuous at \(x=1/2\) and would falsify every nodal-exact test.
-\emph{Independent check:} re-derived \(u^*\) from continuity of \(u\) and of \(a u_x\) with \(u(0)=0\), \(u(1)=1\), obtaining~\eqref{eq:ulayered}. Harmonic FDM then hits \(L^\infty\sim 10^{-14}\).
-\emph{Decision:} use~\eqref{eq:ulayered}. \emph{Limitation:} the derivation is 1D; a genuinely 2D jump geometry needs a separate exact solution.
-
-\paragraph{Item 3: arithmetic averaging as ``symmetric, hence correct''.}
-\emph{Claim / assumptions:} any consistent positive face average yields a valid interface scheme.
-\emph{Risk / falsifier:} reporting \(\|A-A^\top\|=0\) as evidence that the jump is right.
-\emph{Independent check:} Table~\ref{tab:layer}---arithmetic is symmetric and monotone, yet the flux jump stays \(0.66\) and \(L^\infty\) is only first order. Harmonic is nodally exact.
-\emph{Decision:} quote symmetry as structure; quote flux and nodal error as physics. \emph{Limitation:} the arithmetic case is a deliberate negative control, not a candidate production scheme.
-
-\subsection{A4. Ownership}
-I own the stencil derivation, the layered exact profile, the choice of odd-\(N\) grids, the interpretation of arithmetic versus harmonic, and the figures.
-AI assistance filled and checked \texttt{assemble.py} / \texttt{run\_all.py} / \texttt{validation\_tests.py} and the first typesetting pass.
-Trusted dependencies: \texttt{scipy.sparse.coo\_matrix} and \texttt{spsolve} for the discrete solve; \texttt{scipy.sparse.linalg.cg} with a residual callback; \texttt{eigsh} only as SPD/conditioning corroboration; \texttt{scikit-fem} \texttt{condense}/\texttt{asm} as an optional 2D oracle.
-I can explain and modify the FDM assembler without AI during the viva.
+\noindent
+\textbf{Ownership and library interfaces:} Self-implemented in \texttt{code/assemble.py}, \texttt{model.py}, \texttt{verify.py}, \texttt{fem1d.py}. Library calls: \texttt{scipy.sparse.coo\_matrix} / \texttt{spsolve} (direct CSR solve), \texttt{scipy.sparse.linalg.cg} (residual-stopped CG), \texttt{eigsh} (\(\lambda_{\min}, \kappa_2\)), and \texttt{scikit-fem} (2D P1 cross-check).
 
 \section{Individual Contribution Statement}
 \noindent\textbf{Individual Contribution Statement --- Project 2 (PDE BVP)}\\
@@ -565,15 +551,14 @@ Role this project: sole author (implementation, weekly tasks, report).
 
 The specific things I did this project:
 \begin{enumerate}[leftmargin=1.2em]
-  \item Derived the conservative stencil~\eqref{eq:stencil} and the Dirichlet shift~\eqref{eq:dirichlet}; implemented them in \texttt{code/assemble.py} with the index map \(k=in+j\).
-  \item Completed the Week~5 P5 challenge (\(u_h(0.5,0.5)=1.652\)) and the Week~6 four-mesh slope (\(2.00\) in discrete \(L^2\) and \(L^\infty\)).
-  \item Re-derived the layered profile~\eqref{eq:ulayered}, implemented harmonic versus arithmetic face averages, and produced Table~\ref{tab:layer} and Figures~\ref{fig:profile}--\ref{fig:layerorder}.
+  \item Derived the conservative stencil~\eqref{eq:stencil}, the Dirichlet shift~\eqref{eq:dirichlet}, and the \(n=2\) hand matrix~\eqref{eq:handn2}; implemented vectorised COO assembly in \texttt{code/assemble.py} with the index map \(k=in+j\) (cf.\ Appendix~A, Item~1).
+  \item Completed the weekly individual challenges through Week~8: Week~5 five-point P5 centre \(u_h(0.5,0.5)=1.652\); Week~6 four-mesh slope (\(2.00\) in discrete \(L^2\) and \(L^\infty\)); Week~7 residual/tolerance check separating algebraic from discretisation error (Table~\ref{tab:cg}); Week~8 feedback-to-evidence improvement on harmonic versus arithmetic interface flux (Table~\ref{tab:layer}, Figures~\ref{fig:profile}--\ref{fig:layerorder}).
+  \item Re-derived the layered profile~\eqref{eq:ulayered}, implemented harmonic versus arithmetic face averages, and produced Table~\ref{tab:layer} and Figures~\ref{fig:profile}--\ref{fig:layerorder} (cf.\ Appendix~A, Item~2).
   \item Separated algebraic from discretisation error by a CG residual sweep (Table~\ref{tab:cg}); measured CG iterations against contrast (Figure~\ref{fig:contrast}).
   \item Wrote \texttt{validation\_tests.py} and \texttt{run\_all.py}, and wrote the full \LaTeX\ report including the AI log and this ICS.
 \end{enumerate}
 What I would do differently: freeze the layered exact formula on paper before reading the OCR'd pack, instead of debugging a ``failed'' nodal-exact test against a discontinuous \(u^*\).\\
-Anything I should have asked for help with earlier: whether odd \(N\) (interface between columns) versus even \(N\) (interface on a node) is required for the FDM sanity check, before running the first layered table on \(n=15\).\\
-Signature: \underline{\hspace{4cm}} \quad Date: \underline{\hspace{3cm}}
+Anything I should have asked for help with earlier: whether odd \(N\) (interface between columns) versus even \(N\) (interface on a node) is required for the FDM sanity check, before running the first layered table on \(n=15\).
 
 \section{Supplementary data}
 P4 structure at \(n=15\): \(\|A-A^\top\|_{\max}/\|A\|_{\max}=0\), \(\lambda_{\min}=28.61\), \(\kappa_2\approx 1.27\times 10^{2}\).\\

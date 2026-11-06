@@ -141,8 +141,14 @@ def main():
 
     d_show = layered_h[1]  # n=62
     d_show_a = layered_a[1]
-    plot_layered_profile(d_show["axis"], d_show["uh"], d_show["n"],
-                         FIG / "fig06_layered_profile.png", u_layered)
+    plot_layered_profile(
+        d_show["axis"],
+        d_show["uh"],
+        d_show["n"],
+        FIG / "fig06_layered_profile.png",
+        u_layered,
+        uh_arith=d_show_a["uh"],
+    )
     plot_flux(d_show["axis"], d_show["flux"], d_show_a["flux"],
               FIG / "fig07_layered_flux.png")
     hs_L = [d["h"] for d in layered_h]
@@ -151,9 +157,11 @@ def main():
         [([d["Linf"] for d in layered_h], "harmonic $L^\\infty$", "o", BLUE),
          ([d["Linf"] for d in layered_a], "arithmetic $L^\\infty$", "s", ORANGE)],
         FIG / "fig08_order_layered.png",
-        "Layered benchmark: harmonic is nodally exact; arithmetic is not",
-        expected=2.0,
-        annotation="harmonic errors sit at round-off; do not read a slope",
+        "Layered benchmark: harmonic is nodally exact; arithmetic is $O(h)$",
+        expected=1.0,
+        annotation="harmonic errors sit at round-off ($\\sim 10^{-14}$)",
+        ref_index=1,
+        fit_indices={1},
     )
 
     # --- FEM 1D oracle ---

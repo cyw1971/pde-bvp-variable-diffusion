@@ -57,39 +57,76 @@ def plot_spy(A, path, title="Sparsity of $A_h$ after Dirichlet elimination"):
     savefig(path)
 
 
-def plot_convergence(hs, series, path, title, expected=2.0, annotation=None):
+def plot_convergence(
+    hs,
+    series,
+    path,
+    title,
+    expected=2.0,
+    annotation=None,
+    ref_index=0,
+    fit_indices=None,
+):
     """series: list of (errs, label, marker, color)."""
     fig, ax = plt.subplots(figsize=(5.4, 4.2))
     hs = np.asarray(hs, dtype=float)
-    for errs, label, marker, color in series:
+    if fit_indices is None:
+        fit_indices = set(range(len(series)))
+    for idx, (errs, label, marker, color) in enumerate(series):
         errs = np.asarray(errs, dtype=float)
         ax.loglog(hs, errs, marker + "-", color=color, label=label)
-        coef = np.polyfit(np.log(hs), np.log(errs), 1)
-        slope = coef[0]
-        ax.text(
-            0.55, 0.18 if color == BLUE else 0.08,
-            f"{label.split()[0]} fit {slope:.2f}",
-            transform=ax.transAxes, color=color, fontsize=8,
-        )
-    ref = series[0][0][0] * (hs / hs[0]) ** expected
-    ax.loglog(hs, ref, "k--", label=fr"reference $O(h^{{{expected:.0f}}})$")
+        if idx in fit_indices:
+            coef = np.polyfit(np.log(hs), np.log(errs), 1)
+            slope = coef[0]
+            y_pos = 0.18 if color == BLUE else (0.72 if len(fit_indices) == 1 else 0.08)
+            ax.text(
+                0.52,
+                y_pos,
+                f"{label.split()[0]} fit {slope:.2f}",
+                transform=ax.transAxes,
+                color=color,
+                fontsize=8,
+            )
+    ref_base = np.asarray(series[ref_index][0], dtype=float)[0]
+    ref = ref_base * (hs / hs[0]) ** expected
+    exp_str = f"{expected:.0f}" if expected != 1.0 else ""
+    ref_label = r"reference $O(h)$" if expected == 1.0 else fr"reference $O(h^{{{exp_str}}})$"
+    ax.loglog(hs, ref, "k--", label=ref_label)
     ax.set_xlabel(r"mesh size $h$")
     ax.set_ylabel("error")
     ax.set_title(title)
     ax.legend(frameon=False, fontsize=8)
     ax.grid(True, which="both", alpha=0.3)
     if annotation:
-        ax.text(0.04, 0.04, annotation, transform=ax.transAxes, fontsize=8)
+        ax.text(0.04, 0.06, annotation, transform=ax.transAxes, fontsize=8)
     savefig(path)
 
 
-def plot_layered_profile(axis, uh, n, path, exact_fun):
-    U = reshape_field(uh, n)
+def plot_layered_profile(axis, uh_harm, n, path, exact_fun, uh_arith=None):
+    U_h = reshape_field(uh_harm, n)
     mid = n // 2
     x = axis
+    xf = np.linspace(0.0, 1.0, 401)
     fig, ax = plt.subplots(figsize=(5.4, 3.8))
-    ax.plot(x, exact_fun(x, 0.5), "k-", label=r"exact $u^*(x)$")
-    ax.plot(x, U[:, mid], "o", color=ORANGE, markersize=3.5, label=r"$u_h$ at $y\approx 0.5$")
+    ax.plot(xf, exact_fun(xf, 0.5), "k-", lw=1.4, label=r"exact $u^*(x)$")
+    ax.plot(
+        x,
+        U_h[:, mid],
+        "o",
+        color=BLUE,
+        markersize=3.4,
+        label=r"harmonic $u_h$ ($y\approx 0.5$)",
+    )
+    if uh_arith is not None:
+        U_a = reshape_field(uh_arith, n)
+        ax.plot(
+            x,
+            U_a[:, mid],
+            "--",
+            color=ORANGE,
+            lw=1.6,
+            label=r"arithmetic $u_h$ ($y\approx 0.5$)",
+        )
     ax.axvline(0.5, color="0.6", ls=":", label=r"interface $x=1/2$")
     ax.set_xlabel(r"$x$")
     ax.set_ylabel(r"$u$")
@@ -101,13 +138,16 @@ def plot_layered_profile(axis, uh, n, path, exact_fun):
 
 def plot_flux(axis_y, flux_h, flux_a, path):
     fig, ax = plt.subplots(figsize=(5.4, 3.8))
-    ax.plot(axis_y, np.full_like(axis_y, 20.0 / 11.0), "k--", label=r"exact flux $20/11$")
-    ax.plot(axis_y, flux_h, "-", color=BLUE, label="harmonic face average")
-    ax.plot(axis_y, flux_a, "-", color=ORANGE, label="arithmetic face average")
+    ax.plot(axis_y, flux_h, "-", color=BLUE, lw=2.0, label="harmonic face average", zorder=2)
+    ax.plot(axis_y, flux_a, "-", color=ORANGE, lw=1.8, label="arithmetic face average", zorder=2)
+    # Draw the exact flux last and leave room below 20/11 so the dashed
+    # line is not hidden under the harmonic curve or the bottom spine.
+    ax.axhline(20.0 / 11.0, color="k", ls="--", lw=1.4, label=r"exact flux $20/11$", zorder=3)
     ax.set_xlabel(r"$y$ at the interface")
     ax.set_ylabel(r"numerical flux $a_E(U_R-U_L)/h$")
     ax.set_title("Interface flux: harmonic vs arithmetic")
-    ax.legend(frameon=False, fontsize=8)
+    ax.set_ylim(1.70, 2.52)
+    ax.legend(frameon=False, fontsize=8, loc="upper center")
     ax.grid(True, alpha=0.3)
     savefig(path)
 
