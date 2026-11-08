@@ -37,6 +37,20 @@ def solve_cg(A, b, tol=1e-10, maxiter=20000, x0=None):
     return uh, residual, int(count["k"]), bool(info == 0), wall
 
 
+def setup_amg(A):
+    """Smoothed-aggregation AMG hierarchy (pyamg) used as a CG preconditioner."""
+    import pyamg
+
+    return pyamg.smoothed_aggregation_solver(A.tocsr())
+
+
+def solve_amg_cg(ml, b, tol=1e-8, maxiter=500):
+    """AMG-preconditioned CG on a prebuilt hierarchy. Return (uh, iters)."""
+    residuals = []
+    uh = ml.solve(b, tol=tol, accel="cg", maxiter=maxiter, residuals=residuals)
+    return uh, len(residuals) - 1
+
+
 def residual_history_cg(A, b, tol=1e-10, maxiter=20000):
     """Relative residual ||r_k||_inf / ||r_0||_inf after each CG iteration."""
     x = np.zeros_like(b)

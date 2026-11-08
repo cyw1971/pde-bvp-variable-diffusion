@@ -1,6 +1,6 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[margin=2cm]{geometry}
-\usepackage{amsmath,amssymb,bm}
+\usepackage{amsmath,amssymb,amsthm,bm}
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{xcolor}
@@ -18,6 +18,9 @@
 \graphicspath{{../figures/}}
 \captionsetup{font=small,labelfont=bf,skip=6pt}
 \captionsetup[sub]{font=small,skip=2pt}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
 
 \title{%
   Numerical Solution of a Variable-Diffusion Elliptic BVP\\[0.4em]
@@ -34,8 +37,10 @@ Steady heat conduction in a heterogeneous medium is modelled by the divergence-f
 \(-\nabla\cdot(a\nabla u)=f\) on the unit square (Problem Pack Direction~3).
 I discretise with a conservative face-averaged five-point finite-difference scheme, assemble in COO, solve in CSR, and move Dirichlet data into the right-hand side so that boundary nodes are never unknowns.
 On the smooth manufactured benchmark \(a=1+x\), \(u^*=\sin(\pi x)\sin(\pi y)\), discrete \(L^2\) and \(L^\infty\) errors both fit order \(2.00\) over \(n=15,31,63,127\), with \(\|A-A^\top\|_{\max}/\|A\|_{\max}=0\).
-On the layered jump \(a=1\,|\,10\) at \(x=1/2\), a harmonic face average is nodally exact (\(L^\infty\sim 10^{-14}\)) and recovers the interface flux \(20/11\); the arithmetic average of the same nodal values yields first-order \(L^\infty\) error and an \(\mathcal{O}(1)\) flux jump under refinement.
-Unpreconditioned CG matches the direct discrete \(L^2\) error once the relative residual reaches \(10^{-4}\); at \(n=31\) there is no runtime crossover with \texttt{spsolve}.
+A barrier-function argument proves \(\|u_h-u^*\|_\infty\le\|\tau_h\|_\infty/4\) for this problem, and an eigenvalue bound predicts the discrete \(L^2\) error to within \(10\%\).
+On the layered jump \(a=1\,|\,10\) at \(x=1/2\), a harmonic face average is provably nodally exact (\(L^\infty\sim 10^{-14}\)) and recovers the interface flux \(20/11\); for the arithmetic average a one-dimensional flux argument predicts the first-order \(L^\infty\) error to within \(0.2\%\), and the maximum flux jump stays \(\mathcal{O}(1)\) at the interface--boundary corners.
+Unpreconditioned CG matches the direct discrete \(L^2\) error once the relative residual reaches \(10^{-4}\).
+At matched accuracy over \(n=31\)--\(511\), CG is cheapest only for \(n\le 63\), \texttt{spsolve} from \(n=127\) on, and AMG-preconditioned CG needs \(4\)--\(8\) iterations on every mesh but its setup keeps it level with \texttt{spsolve} at \(n=511\).
 The scheme is second-order for smooth \(a\); across an unresolved jump an arithmetic face coefficient loses both order and flux continuity, and CG iteration counts grow with contrast \(a_R/a_L\).
 \end{abstract}
 
@@ -95,7 +100,7 @@ Expected signs: on the layered problem, \(u^*\in[0,1]\) with extrema on the boun
 On P4, \(u^*>0\) in \(\Omega\) and \(u^*=0\) on \(\partial\Omega\).
 
 \subsection{Overview of the Report}
-Section~\ref{sec:disc} derives the face-averaged stencil and Dirichlet shift, states truncation assumptions, and links energy stability to convergence---including the series-resistance derivation of the harmonic face mean.
+Section~\ref{sec:disc} derives the face-averaged stencil and Dirichlet shift, states truncation assumptions, proves max-norm and \(L^2\) convergence bounds for P4, and proves exactness of the harmonic and first-order behaviour of the arithmetic interface rule.
 Section~\ref{sec:impl} records the implementation.
 Section~\ref{sec:exp} verifies P4 by MMS, separates algebraic from discretisation error, falsifies ``symmetry \(\Rightarrow\) correct interface,'' and reports cost at a matched accuracy target.
 Section~\ref{sec:conc} summarises the findings.
@@ -224,10 +229,85 @@ q=\frac{2 a_L a_R}{a_L+a_R}\,\frac{U_R-U_L}{h}.
 So the face coefficient that preserves the continuous flux is exactly~\eqref{eq:harm}.
 The arithmetic mean \((a_L+a_R)/2\) is a different resistance and cannot match \(q\) unless \(a_L=a_R\).
 
-\paragraph{Convergence.}
-On smooth data, consistency of order \(2\) plus the M-matrix / energy stability above imply convergence of order \(2\) in the discrete \(L^2\) and \(L^\infty\) norms (Lax equivalence for linear FD schemes).
-Table~\ref{tab:p4} confirms the rate numerically: fitted slopes \(2.00\) with no deviation on the four meshes.
-On the layered jump the regularity assumption fails, so the theorem does not apply: harmonic averaging restores nodal exactness via~\eqref{eq:series}, while arithmetic averaging drops to first order (Table~\ref{tab:layer}).
+\paragraph{Convergence on smooth data.}
+I derive the bound for P4 directly rather than quoting an equivalence theorem.
+Write \(e=U-u^*|_{\mathrm{grid}}\); since \(A_h u^*=b-\tau_h\), the error solves \(A_h e=\tau_h\), so any bound on \(A_h^{-1}\) converts the truncation of Table~\ref{tab:trunc} into an error bound.
+
+\begin{lemma}[Barrier bound]\label{lem:barrier}
+Let \(A\) be a nonsingular M-matrix, so \(A^{-1}\ge 0\) entrywise. If \(\varphi\ge 0\) satisfies \(A\varphi\ge c\mathbf{1}\) with \(c>0\), then \(\|A^{-1}\|_\infty\le\|\varphi\|_\infty/c\).
+\end{lemma}
+\begin{proof}
+Because \(A^{-1}\ge 0\), \(\|A^{-1}\|_\infty=\max_k(A^{-1}\mathbf{1})_k\) and \(A^{-1}\mathbf{1}\le c^{-1}A^{-1}(A\varphi)=\varphi/c\) componentwise.
+\end{proof}
+
+\begin{theorem}[Second-order convergence for P4]\label{thm:p4}
+For \(a=1+x\) with half-point face coefficients, \(\|A_h^{-1}\|_\infty\le 1/4\) and \(\lambda_{\min}(A_h)\ge 8\sin^2(\pi h/2)/h^2\) (\(\ge 19.68\) for \(n\ge 15\)). Hence
+\[
+\|e\|_\infty\le\tfrac14\|\tau_h\|_\infty=\mathcal{O}(h^2),\qquad
+h\|e\|_2\le\frac{h\|\tau_h\|_2}{\lambda_{\min}(A_h)}=\mathcal{O}(h^2).
+\]
+\end{theorem}
+\begin{proof}
+Take \(\varphi(x)=x(1-x)/2\) at the interior nodes, so \(\|\varphi\|_\infty\le 1/8\).
+Because \(\varphi\) is quadratic, \((\varphi_{i+1}-\varphi_i)/h=\varphi'(x_{i+1/2})\) exactly, so each \(x\)-face flux equals \(q(x_{i+1/2})\) with \(q=(1+x)(\tfrac12-x)\); \(q\) is quadratic, so its centred difference is exact and the \(x\)-part of row \((i,j)\) equals \(-q'(x_i)=\tfrac12+2x_i\).
+The \(y\)-differences of \(\varphi\) vanish.
+Where a neighbour is a Dirichlet node, elimination drops the term \(-a_{\mathrm{face}}\varphi_{\mathrm{nbr}}/h^2\le 0\) from the row (on \(x=0,1\) it is zero since \(\varphi=0\) there), which can only increase \((A_h\varphi)_{ij}\).
+Hence \(A_h\varphi\ge\tfrac12\mathbf{1}\), and Lemma~\ref{lem:barrier} gives \(\|A_h^{-1}\|_\infty\le(1/8)/(1/2)=1/4\).
+For \(L^2\), the quadratic form \(U^\top A_hU=\sum_{\mathrm{faces}}a_{\mathrm{face}}(\delta U)^2/h^2\) with \(a_{\mathrm{face}}\ge 1\) dominates the same sum for \(-\Delta_h\), whose smallest eigenvalue is \(8\sin^2(\pi h/2)/h^2\); then \(\lambda_{\min}\|e\|_2^2\le e^\top A_he=e^\top\tau_h\le\|e\|_2\|\tau_h\|_2\).
+Both constants are \(h\)-independent and \(\|\tau_h\|=\mathcal{O}(h^2)\) by the consistency argument above.
+\end{proof}
+
+Table~\ref{tab:bounds} compares the predicted bounds with the observed errors.
+The max-norm bound is about \(8\times\) pessimistic because \(\tau_h\) peaks near \(\partial\Omega\), where \(e\) is pinned to zero.
+With the computed \(\lambda_{\min}\approx 28.7\) the \(L^2\) bound is within \(10\%\) of the observed error, because \(u^*=\sin(\pi x)\sin(\pi y)\) is close to the lowest eigenmode.
+All bounds shrink by \(4\) per refinement, matching the fitted order \(2.00\) of Table~\ref{tab:p4}.
+\texttt{test\_p4\_barrier\_bound} checks \(A_h\varphi\ge 1/2\) and \(\max(A_h^{-1}\mathbf{1})\le 1/4\) numerically.
+
+\begin{table}[H]
+\centering
+\caption{P4: proven bounds of Theorem~\ref{thm:p4} against observed errors. ``rigorous'' uses \(\lambda_{\min}(-\Delta_h)\); ``computed'' uses \(\lambda_{\min}(A_h)\) from \texttt{eigsh}.}
+\label{tab:bounds}
+\begin{tabular}{@{}rccccc@{}}
+\toprule
+\(n\) & \(\tfrac14\|\tau_h\|_\infty\) & observed \(L^\infty\) & \(L^2\) bound (rigorous) & \(L^2\) bound (computed) & observed \(L^2\)\\
+\midrule
+15  & \(2.57\times 10^{-2}\) & \(3.21\times 10^{-3}\) & \(2.53\times 10^{-3}\) & \(1.74\times 10^{-3}\) & \(1.60\times 10^{-3}\)\\
+31  & \(6.43\times 10^{-3}\) & \(8.01\times 10^{-4}\) & \(6.33\times 10^{-4}\) & \(4.35\times 10^{-4}\) & \(3.99\times 10^{-4}\)\\
+63  & \(1.61\times 10^{-3}\) & \(2.00\times 10^{-4}\) & \(1.58\times 10^{-4}\) & \(1.09\times 10^{-4}\) & \(9.97\times 10^{-5}\)\\
+127 & \(4.02\times 10^{-4}\) & \(5.01\times 10^{-5}\) & \(3.96\times 10^{-5}\) & ---                    & \(2.49\times 10^{-5}\)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Exactness of the harmonic rule.}
+On the layered jump the regularity assumptions of Theorem~\ref{thm:p4} fail, so I analyse the two face rules separately.
+
+\begin{proposition}\label{prop:harm}
+For the layered problem with odd \(N\) and harmonic interface coefficient~\eqref{eq:harm}, the discrete solution equals \(u^*\) at every node.
+\end{proposition}
+\begin{proof}
+Insert \(u^*\) from~\eqref{eq:ulayered} into~\eqref{eq:stencil}, with the Dirichlet values \(g=u^*\) treated as neighbours.
+\(u^*\) is independent of \(y\), so all \(y\)-face fluxes vanish.
+An \(x\)-face that does not cross \(x=1/2\) has constant \(a\) and linear \(u^*\), so its discrete flux equals \(au^*_x=20/11\) exactly; the interface face gives \(20/11\) by~\eqref{eq:series}.
+Every row is therefore a difference of equal fluxes, \((A_hu^*)_{ij}=0=f\), so \(\tau_h\equiv 0\), and since \(A_h\) is SPD, \(U=u^*\).
+\end{proof}
+
+\paragraph{First-order error of the arithmetic rule.}
+Replace the interface coefficient by \(a_A=(1+10)/2=11/2\) and look for a \(y\)-independent discrete solution.
+Since \(f=0\), every \(x\)-face carries the same discrete flux \(q_h\).
+With interface columns \(x_L=\tfrac12-\tfrac h2\), \(x_R=\tfrac12+\tfrac h2\), the left slope is \(q_h\), the right slope is \(q_h/10\), and the interface jump is \(U_R-U_L=q_hh/a_A\).
+Imposing \(U(0)=0\), \(U(1)=1\):
+\begin{equation}
+q_h\Bigl[\tfrac{11}{20}(1-h)+\tfrac{h}{a_A}\Bigr]=1
+\;\Longrightarrow\;
+q_h=\frac{20/11}{1-\tfrac{81}{121}h}=\frac{20}{11}\Bigl(1+0.669\,h+\mathcal{O}(h^2)\Bigr).
+\label{eq:arithq}
+\end{equation}
+Setting \(a_A=a_H=20/11\) in~\eqref{eq:arithq} returns \(q_h=20/11\) exactly, which is Proposition~\ref{prop:harm} again.
+The nodal error is largest at \(x_L\): \(\|e\|_\infty=(q_h-\tfrac{20}{11})(\tfrac12-\tfrac h2)\approx 0.61\,h\), i.e.\ \(1.942\times 10^{-2}\), \(9.609\times 10^{-3}\), \(4.779\times 10^{-3}\), \(2.383\times 10^{-3}\) for \(N=31,63,127,255\).
+The 2D values in Table~\ref{tab:layer} agree to \(0.19\%\), \(0.09\%\), \(0.05\%\), \(0.02\%\); the residual gap comes from the top and bottom Dirichlet rows, which carry the exact \(u^*\) rather than this discrete profile (\texttt{test\_arithmetic\_closed\_form}).
+The same argument predicts a mid-line flux error \(q_h-20/11=\mathcal{O}(h)\).
+Near \(y=0,1\) the exact Dirichlet data are incompatible with the \(\mathcal{O}(h)\)-shifted interior profile across one cell, so the flux error there stays \(\approx 0.66\) under refinement.
 
 Three numerical checks corroborate the derivation:
 \(\|A-A^\top\|_{\max}/\|A\|_{\max}=0\) on every assembled matrix in this report;
@@ -270,7 +350,7 @@ File & Purpose\\
 \midrule
 \texttt{model.py} & \(a(x,y)\), manufactured \(u^*\), layered exact profile~\eqref{eq:ulayered}\\
 \texttt{assemble.py} & sparse face-averaged stencil, index map, interface flux\\
-\texttt{solvers.py} & \texttt{spsolve}, residual-stopped CG, \(\lambda_{\min}\) / \(\kappa\) via \texttt{eigsh}\\
+\texttt{solvers.py} & \texttt{spsolve}, residual-stopped CG, AMG-preconditioned CG, \(\lambda_{\min}\) / \(\kappa\) via \texttt{eigsh}\\
 \texttt{verify.py} & named-norm errors, four-mesh tables, layered diagnostics\\
 \texttt{plots.py} & every report figure\\
 \texttt{fem1d.py} / \texttt{fem2d\_oracle.py} & independent 1D P1 and optional 2D P1 oracles\\
@@ -284,15 +364,15 @@ File & Purpose\\
 \subsection{Key Design Decisions}
 I assemble in COO using vectorised 2D index masks over the four stencil directions (no Python loops over grid nodes) and convert to CSR once.
 The physics (\(a\), \(f\), \(g\)) lives in \texttt{model.py}, so the same assembler runs P4, P5 and the layered jump.
-The default solve is sparse direct: at the meshes in this report (\(n\le 254\), \(N_{\mathrm{unk}}\le 6.5\times 10^4\), five nonzeros per row) a banded factorisation is cheaper than unpreconditioned CG, which I still run as a residual-stopped iterative check and as a contrast-sensitivity probe.
+The default solve is sparse direct: at matched accuracy it is the cheapest solver from \(n=127\) on and costs milliseconds below that (Table~\ref{tab:costmesh}); unpreconditioned CG serves as a residual-stopped iterative check and a contrast-sensitivity probe, and AMG-CG as the scalable alternative.
 Because shared face coefficients make \(A_h\) symmetric positive definite, Krylov CG is preferred over stationary Jacobi or Gauss--Seidel (error contraction governed by \((\sqrt{\kappa}-1)/(\sqrt{\kappa}+1)\) rather than \((\kappa-1)/(\kappa+1)\)).
-Cost measure (named before it is quoted): for CG, iteration count to a stated relative residual; for the direct solver, one sparse factorisation, with wall time only as a secondary observation.
+Cost measure (named before it is quoted): wall-clock solve time to a matched discrete \(L^2\) target, with iteration counts as the secondary measure; I do not count assembly, eigenvalue estimates, or plotting.
 
 \section{Verification and Numerical Experiments}
 \label{sec:exp}
 \subsection{Verification: Method of Manufactured Solutions}
 The bank's finite-difference self-check on \(f=-\nabla\cdot(a\nabla u^*)\) passes with worst relative error \(5.8\times 10^{-6}\) (analytic data check, not a solver test)~\cite{problemPack}.
-Sign and boundary gates come first: P2 (\(u^*=x^2-y^2\)) has \(L^\infty=3.3\times 10^{-16}\) at \(n=15\) (exact on this quadratic); P5 recovers the Tutorial~5 centre \(u_h(0.5,0.5)=1.652\).
+Sign and boundary gates come first: P2 (\(u^*=x^2-y^2\)) has \(L^\infty=4.4\times 10^{-16}\) at \(n=15\) (exact on this quadratic); P5 recovers the Tutorial~5 centre \(u_h(0.5,0.5)=1.652\).
 
 Table~\ref{tab:p4} is the P4 refinement study.
 Named norms: discrete \(L^2\) given by \(h\|u_h-u^*\|_2\), and \(\|u_h-u^*\|_\infty\).
@@ -308,9 +388,9 @@ Figure~\ref{fig:order} plots that table; Figure~\ref{fig:field} shows the field 
 \(n\) & \(h\) & \(L^2\) & \(L^\infty\) & \(\|b-Au_h\|_\infty\) & \(p_{L^2}\) & \(p_\infty\)\\
 \midrule
 15  & \(1/16\)  & \(1.598\times 10^{-3}\) & \(3.205\times 10^{-3}\) & \(4.48\times 10^{-13}\) & --- & ---\\
-31  & \(1/32\)  & \(3.988\times 10^{-4}\) & \(8.009\times 10^{-4}\) & \(3.00\times 10^{-12}\) & \(2.00\) & \(2.00\)\\
-63  & \(1/64\)  & \(9.966\times 10^{-5}\) & \(2.003\times 10^{-4}\) & \(1.40\times 10^{-11}\) & \(2.00\) & \(2.00\)\\
-127 & \(1/128\) & \(2.491\times 10^{-5}\) & \(5.007\times 10^{-5}\) & \(6.92\times 10^{-11}\) & \(2.00\) & \(2.00\)\\
+31  & \(1/32\)  & \(3.988\times 10^{-4}\) & \(8.009\times 10^{-4}\) & \(2.90\times 10^{-12}\) & \(2.00\) & \(2.00\)\\
+63  & \(1/64\)  & \(9.966\times 10^{-5}\) & \(2.003\times 10^{-4}\) & \(1.52\times 10^{-11}\) & \(2.00\) & \(2.00\)\\
+127 & \(1/128\) & \(2.491\times 10^{-5}\) & \(5.007\times 10^{-5}\) & \(6.84\times 10^{-11}\) & \(2.00\) & \(2.00\)\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -372,7 +452,7 @@ h=\tfrac14 \;\Rightarrow\;
 \subsection{Separating Algebraic and Discretisation Error}
 \texttt{spsolve} has no tolerance parameter.
 I treat its solution as the exact discrete solution and report the backward residual.
-On P4 at \(n=31\), \(\|b-Au_h\|_\infty=3.00\times 10^{-12}\) while the discrete \(L^2\) error is \(3.99\times 10^{-4}\).
+On P4 at \(n=31\), \(\|b-Au_h\|_\infty=2.90\times 10^{-12}\) while the discrete \(L^2\) error is \(3.99\times 10^{-4}\).
 A crude forward-error sketch \(\|e\|_2\lesssim \|r\|_2/\lambda_{\min}\) with \(\lambda_{\min}\approx 28.7\) puts the algebraic error near \(10^{-13}\), four orders below the discretisation error.
 
 Unpreconditioned CG on the same matrix, stopped on the relative residual \(\|r_k\|_\infty/\|r_0\|_\infty\), is the second demonstration (Figure~\ref{fig:cg}).
@@ -382,7 +462,7 @@ I stop CG on the residual, never on \(\|x^{k+1}-x^k\|\).
 
 \begin{table}[H]
 \centering
-\caption{P4, \(n=31\): CG versus \texttt{spsolve}. Cost for CG is iteration count; \texttt{spsolve} is one factorisation (\(0.002\,\mathrm{s}\) wall). The \(L^2\) column is the quantity of interest.}
+\caption{P4, \(n=31\): CG versus \texttt{spsolve}. Cost for CG is iteration count; \texttt{spsolve} is one factorisation. The \(L^2\) column is the quantity of interest; wall times across meshes are in Table~\ref{tab:costmesh}.}
 \label{tab:cg}
 \begin{tabular}{@{}lccc@{}}
 \toprule
@@ -391,8 +471,8 @@ Solve & iterations & \(\|b-Au\|_\infty\) & discrete \(L^2\)\\
 CG, rel.\ \(10^{-2}\) & 26 & \(7.5\times 10^{-1}\) & \(4.329\times 10^{-4}\)\\
 CG, rel.\ \(10^{-4}\) & 39 & \(5.9\times 10^{-3}\) & \(3.988\times 10^{-4}\)\\
 CG, rel.\ \(10^{-6}\) & 43 & \(1.3\times 10^{-5}\) & \(3.988\times 10^{-4}\)\\
-CG, rel.\ \(10^{-10}\) & 47 & \(3.5\times 10^{-9}\) & \(3.988\times 10^{-4}\)\\
-\texttt{spsolve} & --- & \(3.0\times 10^{-12}\) & \(3.988\times 10^{-4}\)\\
+CG, rel.\ \(10^{-10}\) & 47 & \(3.4\times 10^{-9}\) & \(3.988\times 10^{-4}\)\\
+\texttt{spsolve} & --- & \(2.9\times 10^{-12}\) & \(3.988\times 10^{-4}\)\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -409,7 +489,7 @@ CG, rel.\ \(10^{-10}\) & 47 & \(3.5\times 10^{-9}\) & \(3.988\times 10^{-4}\)\\
   \includegraphics[width=\linewidth]{fig10_cost_accuracy.png}
   \caption{Discrete \(L^2\) vs.\ CG iterations.}
 \end{subfigure}
-\caption{Left: residual history with stopping line at \(10^{-10}\). Right: discrete \(L^2\) versus CG iterations; dashed line is the \texttt{spsolve} error. Once the residual is tight enough the error floor is discretisation. At \(n=31\) both solves finish in about \(2\,\mathrm{ms}\).}
+\caption{Left: residual history with stopping line at \(10^{-10}\). Right: discrete \(L^2\) versus CG iterations; dashed line is the \texttt{spsolve} error. Once the residual is tight enough the error floor is discretisation.}
 \label{fig:cg}
 \end{figure}
 
@@ -423,8 +503,8 @@ An interface-fitted 1D P1 FEM with \(32\) elements (so \(x=1/2\) is a node) repr
 Two methods that share neither the stencil nor the mesh convention agree on the exact nodal values.
 
 Arithmetic averaging still produces a symmetric M-matrix, but the wrong series resistance in~\eqref{eq:series}.
-The flux jump stays \(\approx 0.66\) under refinement (\(\mathcal{O}(1)\), not \(\mathcal{O}(h)\)).
-The \(L^\infty\) solution error is first-order (\(\approx 1.94\times 10^{-2}\) down to \(2.38\times 10^{-3}\) as \(N\) runs through \(31,63,127,255\)).
+The maximum flux jump stays \(\approx 0.66\) under refinement (\(\mathcal{O}(1)\)), but it sits in at most \(8\) rows next to the interface--boundary corners; on the mid-line \(y\approx 1/2\) the flux error is \(4.70\times 10^{-2}\), \(2.29\times 10^{-2}\), \(1.13\times 10^{-2}\), \(5.64\times 10^{-3}\), first order as~\eqref{eq:arithq} predicts.
+The \(L^\infty\) solution error is first-order (\(\approx 1.94\times 10^{-2}\) down to \(2.38\times 10^{-3}\) as \(N\) runs through \(31,63,127,255\)) and matches the closed form below~\eqref{eq:arithq}.
 Relative to the smooth-case energy~\eqref{eq:energy}, the flux error is the physically meaningful defect: arithmetic keeps a discrete energy form but with the wrong \(a_{\mathrm{face}}\), so \(L^2\)-looking plots can look stable while transport is wrong.
 
 On every harmonic and arithmetic run the discrete solution stays in \([0,1]\): both averages inherit the M-matrix / DMP.
@@ -459,7 +539,7 @@ Value of the comparison: it separates algebraic structure (symmetry, SPD) from i
   \includegraphics[width=\linewidth]{fig07_layered_flux.png}
   \caption{Interface flux versus \(y\).}
 \end{subfigure}
-\caption{Left: harmonic \(u_h\) (blue circles) and arithmetic \(u_h\) (orange dashed) against the exact piecewise-linear profile; the kink at \(x=1/2\) sits between columns. Right: interface flux versus \(y\). The dashed line is the exact flux \(20/11\); harmonic sits on it, while arithmetic is a different constant that does not shrink with \(h\).}
+\caption{Left: harmonic \(u_h\) (blue circles) and arithmetic \(u_h\) (orange dashed) against the exact piecewise-linear profile; the kink at \(x=1/2\) sits between columns. Right: interface flux versus \(y\). The dashed line is the exact flux \(20/11\); harmonic sits on it, while arithmetic is offset by \(\mathcal{O}(h)\) in the interior and by \(\approx 0.66\) in the rows next to \(y=0,1\).}
 \label{fig:profile}
 \end{figure}
 
@@ -471,15 +551,56 @@ Value of the comparison: it separates algebraic structure (symmetry, SPD) from i
 \end{figure}
 
 \subsection{Main Results: Contrast, Conditioning, Cost}
-Unpreconditioned CG iteration counts on the layered harmonic matrix at \(n=30\), relative residual \(10^{-10}\), grow with the contrast \(a_R/a_L\): \(125\), \(227\), \(401\), \(615\) iterations at contrasts \(2,10,50,200\) (Figure~\ref{fig:contrast}).
+Unpreconditioned CG iteration counts on the layered harmonic matrix at \(n=30\), relative residual \(10^{-10}\), grow with the contrast \(a_R/a_L\): \(125\), \(227\), \(402\), \(615\) iterations at contrasts \(2,10,50,200\) (Figure~\ref{fig:contrast}).
 Coefficient contrast worsens conditioning but preserves the discrete maximum principle.
 On smooth P4, \(\kappa_2(A_h)\) tracks \(h^{-2}\) as already quoted.
 
 \paragraph{Cost--accuracy at a matched target.}
-Cost measure (stated before quoting): CG iteration count to a relative residual, versus one sparse factorisation for \texttt{spsolve}.
-Accuracy target (frozen across the comparison): discrete \(L^2\) error equal to the \texttt{spsolve} value \(3.988\times 10^{-4}\) on P4 at \(n=31\).
-Table~\ref{tab:cg} and Figure~\ref{fig:cg} (right) show that CG first hits this target at relative residual \(10^{-4}\) (39 iterations, \(\approx 2\,\mathrm{ms}\) wall); \texttt{spsolve} reaches the same \(L^2\) in one factorisation (\(\approx 2\,\mathrm{ms}\)).
-At matched discretisation accuracy there is no runtime crossover for \(n\le 31\).
+Cost measure (stated before quoting): wall-clock time of the solve phase, median of \(5\) repeats on one laptop, with CG and AMG-CG iteration counts as the hardware-independent secondary measure.
+For AMG-preconditioned CG (\texttt{pyamg} smoothed aggregation, Tutorial~6) the hierarchy setup is counted and reported separately from the solve.
+Not counted: assembly, eigenvalue estimates, figure rendering, and Python interpreter startup.
+Accuracy target (frozen across the comparison): on each P4 mesh, discrete \(L^2\) error within \(0.1\%\) of the \texttt{spsolve} value on that mesh; each iterative solver gets the loosest relative residual in \(\{10^{-4},\dots,10^{-10}\}\) that meets it.
+At \(n=31\) this is Table~\ref{tab:cg}: CG meets the target at relative residual \(10^{-4}\) after \(39\) iterations.
+Table~\ref{tab:costmesh} and Figure~\ref{fig:costmesh} extend the comparison to \(n=511\) (\(2.6\times 10^5\) unknowns).
+
+\begin{table}[H]
+\centering
+\caption{P4 cost at matched accuracy (discrete \(L^2\) within \(0.1\%\) of \texttt{spsolve}). Wall times in seconds, median of \(5\) runs; assembly not counted. AMG-CG time is setup \(+\) solve.}
+\label{tab:costmesh}
+\begin{tabular}{@{}rrcccccc@{}}
+\toprule
+\(n\) & unknowns & target \(L^2\) & \texttt{spsolve} & CG it. & CG time & AMG-CG it. & AMG-CG time\\
+\midrule
+31  & 961     & \(3.99\times 10^{-4}\) & \(0.0010\) & 39  & \(0.0004\) & 4 & \(0.0045+0.0012\)\\
+63  & 3\,969  & \(9.97\times 10^{-5}\) & \(0.0062\) & 88  & \(0.0025\) & 5 & \(0.0067+0.0026\)\\
+127 & 16\,129 & \(2.49\times 10^{-5}\) & \(0.032\)  & 190 & \(0.057\)  & 6 & \(0.042+0.011\)\\
+255 & 65\,025 & \(6.23\times 10^{-6}\) & \(0.197\)  & 394 & \(0.209\)  & 7 & \(0.137+0.049\)\\
+511 & 261\,121 & \(1.56\times 10^{-6}\) & \(1.32\)  & 807 & \(2.85\)   & 8 & \(1.02+0.38\)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Unpreconditioned CG is cheapest on the two coarsest meshes, where every solver finishes in milliseconds.
+Its iteration count roughly doubles per refinement (fitted slope \(-1.09\) against \(h\), Figure~\ref{fig:costmesh} right), as the CG bound \(\sqrt{\kappa_2}\propto h^{-1}\) predicts from the \(\kappa_2\sim h^{-2}\) growth above; from \(n=127\) \texttt{spsolve} is cheaper, and at \(n=511\) CG is \(2.2\times\) slower.
+AMG-CG needs \(4\)--\(8\) iterations on every mesh and its solve phase alone is \(3.5\times\) faster than \texttt{spsolve} at \(n=511\), but the setup costs \(1.02\,\mathrm{s}\); setup plus solve is within \(6\%\) of \texttt{spsolve} at \(n=255\) and \(n=511\), comparable to the run-to-run timing scatter.
+Conclusion (negative for both iterative solvers on this range): at matched accuracy no iterative solver beats one sparse factorisation reliably for \(n\ge 127\) on this 2D problem.
+AMG-CG would pay off only if its hierarchy were reused for several right-hand sides or the mesh grew beyond \(n=511\), which is outside the meshes reported here.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{fig12_cost_meshes.png}
+  \caption{Wall time at matched \(L^2\) versus unknowns.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{fig13_iterations_h.png}
+  \caption{Iterations to matched \(L^2\) versus \(h\).}
+\end{subfigure}
+\caption{P4 cost study, \(n=31\)--\(511\). Left: \texttt{spsolve}, unpreconditioned CG, and AMG-CG (solid: setup \(+\) solve; dotted: solve only); assembly not counted. Right: CG iterations follow the \(h^{-1}\) reference, while AMG-CG iterations are nearly mesh-independent.}
+\label{fig:costmesh}
+\end{figure}
 
 \begin{figure}[H]
 \centering
@@ -492,16 +613,17 @@ At matched discretisation accuracy there is no runtime crossover for \(n\le 31\)
 The second-order claim applies to smooth \(a\) with the half-point face rule.
 Across a jump, harmonic averaging on an aligned grid is exact for this piecewise-linear \(u^*\).
 Arithmetic averaging remains an M-matrix and still looks smooth on a colour plot, yet its flux is wrong.
-Unpreconditioned CG will not be competitive on finer 2D meshes; AMG-CG (Tutorial~6) is the natural next solver.
+Wall times are from one machine and scatter by roughly \(10\%\) between runs, so the AMG-CG versus \texttt{spsolve} ranking at \(n\ge 255\) is a tie rather than a result; iteration counts are the robust part of the cost study.
+The proofs of Theorem~\ref{thm:p4} and Proposition~\ref{prop:harm} use the specific P4 coefficient and the aligned, \(y\)-independent layered solution; a non-aligned or curved interface is not covered.
 
 \FloatBarrier
 \section{Conclusions}
 \label{sec:conc}
 \begin{itemize}[leftmargin=1.2em]
   \item A conservative face-averaged five-point scheme for \(-\nabla\cdot(a\nabla u)\) with Dirichlet data moved into \(b\) was assembled and verified on the analytic bank before the jump.
-  \item On smooth P4, discrete \(L^2\) and \(L^\infty\) both fit order \(2.00\) over four meshes; \(\|A-A^\top\|_{\max}=0\) and \(\lambda_{\min}>0\). The reported rate survives a CG tolerance sweep.
-  \item On the layered jump, harmonic face coefficients are nodally exact and keep the flux at \(20/11\); arithmetic coefficients give first-order \(L^\infty\) error and an \(\mathcal{O}(1)\) flux jump. Symmetry is necessary but not sufficient for correct interface physics.
-  \item Cost is CG iterations or one sparse factorisation. At \(n=31\), CG and \texttt{spsolve} agree in \(L^2\) once the relative residual is \(10^{-4}\). Next step: AMG-preconditioned CG on finer meshes and non-aligned interfaces.
+  \item On smooth P4, discrete \(L^2\) and \(L^\infty\) both fit order \(2.00\) over four meshes; \(\|A-A^\top\|_{\max}=0\) and \(\lambda_{\min}>0\). A barrier function proves \(\|e\|_\infty\le\|\tau_h\|_\infty/4\), and the eigenvalue bound predicts the \(L^2\) error within \(10\%\). The reported rate survives a CG tolerance sweep.
+  \item On the layered jump, harmonic face coefficients are provably nodally exact and keep the flux at \(20/11\); for arithmetic coefficients the closed form~\eqref{eq:arithq} predicts the first-order \(L^\infty\) error to \(0.2\%\), and the flux error is \(\mathcal{O}(h)\) on the mid-line but \(\mathcal{O}(1)\) at the corners. Symmetry is necessary but not sufficient for correct interface physics.
+  \item Cost is wall time at matched \(L^2\), with iterations secondary. CG wins only for \(n\le 63\); \texttt{spsolve} wins from \(n=127\); AMG-CG has mesh-independent iterations but ties \texttt{spsolve} at \(n=511\) once setup is counted. Next step: non-aligned interfaces, and AMG reuse across several right-hand sides.
 \end{itemize}
 
 \FloatBarrier
@@ -542,7 +664,7 @@ Item & Claim / assumption & Risk / falsifier & Independent check \& decision\\
 \end{tabular}
 \end{center}
 \noindent
-\textbf{Ownership and library interfaces:} Self-implemented in \texttt{code/assemble.py}, \texttt{model.py}, \texttt{verify.py}, \texttt{fem1d.py}. Library calls: \texttt{scipy.sparse.coo\_matrix} / \texttt{spsolve} (direct CSR solve), \texttt{scipy.sparse.linalg.cg} (residual-stopped CG), \texttt{eigsh} (\(\lambda_{\min}, \kappa_2\)), and \texttt{scikit-fem} (2D P1 cross-check).
+\textbf{Ownership and library interfaces:} Self-implemented in \texttt{code/assemble.py}, \texttt{model.py}, \texttt{verify.py}, \texttt{fem1d.py}. Library calls: \texttt{scipy.sparse.coo\_matrix} / \texttt{spsolve} (direct CSR solve), \texttt{scipy.sparse.linalg.cg} (residual-stopped CG), \texttt{eigsh} (\(\lambda_{\min}, \kappa_2\)), \texttt{pyamg.smoothed\_aggregation\_solver} (AMG preconditioner), and \texttt{scikit-fem} (2D P1 cross-check).
 
 \section{Individual Contribution Statement}
 \noindent\textbf{Individual Contribution Statement --- Project 2 (PDE BVP)}\\
@@ -554,7 +676,8 @@ The specific things I did this project:
   \item Derived the conservative stencil~\eqref{eq:stencil}, the Dirichlet shift~\eqref{eq:dirichlet}, and the \(n=2\) hand matrix~\eqref{eq:handn2}; implemented vectorised COO assembly in \texttt{code/assemble.py} with the index map \(k=in+j\) (cf.\ Appendix~A, Item~1).
   \item Completed the weekly individual challenges through Week~8: Week~5 five-point P5 centre \(u_h(0.5,0.5)=1.652\); Week~6 four-mesh slope (\(2.00\) in discrete \(L^2\) and \(L^\infty\)); Week~7 residual/tolerance check separating algebraic from discretisation error (Table~\ref{tab:cg}); Week~8 feedback-to-evidence improvement on harmonic versus arithmetic interface flux (Table~\ref{tab:layer}, Figures~\ref{fig:profile}--\ref{fig:layerorder}).
   \item Re-derived the layered profile~\eqref{eq:ulayered}, implemented harmonic versus arithmetic face averages, and produced Table~\ref{tab:layer} and Figures~\ref{fig:profile}--\ref{fig:layerorder} (cf.\ Appendix~A, Item~2).
-  \item Separated algebraic from discretisation error by a CG residual sweep (Table~\ref{tab:cg}); measured CG iterations against contrast (Figure~\ref{fig:contrast}).
+  \item Proved the barrier bound (Theorem~\ref{thm:p4}), harmonic exactness (Proposition~\ref{prop:harm}) and the arithmetic closed form~\eqref{eq:arithq}, and checked each against the code (Table~\ref{tab:bounds}, \texttt{validation\_tests.py}).
+  \item Separated algebraic from discretisation error by a CG residual sweep (Table~\ref{tab:cg}); measured CG iterations against contrast (Figure~\ref{fig:contrast}); ran the matched-accuracy cost study of \texttt{spsolve}, CG and AMG-CG up to \(n=511\) (Table~\ref{tab:costmesh}).
   \item Wrote \texttt{validation\_tests.py} and \texttt{run\_all.py}, and wrote the full \LaTeX\ report including the AI log and this ICS.
 \end{enumerate}
 What I would do differently: freeze the layered exact formula on paper before reading the OCR'd pack, instead of debugging a ``failed'' nodal-exact test against a discontinuous \(u^*\).\\

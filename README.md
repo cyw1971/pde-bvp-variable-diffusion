@@ -42,5 +42,7 @@ All figures are written by `python code/run_all.py` into `figures/`:
 | `fig09_cg_residual.png` | CG residual history |
 | `fig10_cost_accuracy.png` | error vs CG iterations |
 | `fig11_iterations_contrast.png` | CG iters vs \(a_R/a_L\) |
+| `fig12_cost_meshes.png` | wall time at matched \(L^2\): spsolve vs CG vs AMG-CG, \(n=31\)–\(511\) |
+| `fig13_iterations_h.png` | CG and AMG-CG iterations vs \(h\) |
 
 Index map (also in `code/assemble.py`): \(n\) interior nodes per direction, \(h=1/(n+1)\), \(k=i n+j\).

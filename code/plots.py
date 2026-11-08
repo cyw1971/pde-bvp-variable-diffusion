@@ -179,6 +179,40 @@ def plot_cost_accuracy(points, path, target=None):
     savefig(path)
 
 
+def plot_cost_meshes(n_unknowns, series, path):
+    """series: list of (wall_times, label, marker, color, linestyle)."""
+    fig, ax = plt.subplots(figsize=(5.4, 3.9))
+    N = np.asarray(n_unknowns, dtype=float)
+    for walls, label, marker, color, ls in series:
+        ax.loglog(N, walls, marker=marker, ls=ls, color=color, label=label)
+    ax.set_xlabel(r"unknowns $n^2$")
+    ax.set_ylabel("wall time to matched $L^2$ target [s]")
+    ax.set_title("Cost at matched accuracy (assembly not counted)")
+    ax.legend(frameon=False, fontsize=8)
+    ax.grid(True, which="both", alpha=0.3)
+    savefig(path)
+
+
+def plot_iterations_h(hs, iters_cg, iters_amg, path):
+    fig, ax = plt.subplots(figsize=(5.4, 3.9))
+    hs = np.asarray(hs, dtype=float)
+    iters_cg = np.asarray(iters_cg, dtype=float)
+    slope = np.polyfit(np.log(hs), np.log(iters_cg), 1)[0]
+    ax.loglog(hs, iters_cg, "o-", color=BLUE, label=f"CG (fitted slope {slope:.2f})")
+    ax.loglog(hs, iters_amg, "s-", color=ORANGE, label="AMG-preconditioned CG")
+    ax.loglog(hs, iters_cg[0] * (hs / hs[0]) ** -1.0, "k--",
+              label=r"reference $O(h^{-1})\propto\sqrt{\kappa}$")
+    ax.set_xticks(hs)
+    ax.set_xticklabels([f"1/{round(1.0 / h)}" for h in hs])
+    ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    ax.set_xlabel(r"mesh size $h$")
+    ax.set_ylabel("iterations to matched $L^2$ target")
+    ax.set_title(r"Iterations track $\sqrt{\kappa_2}\sim h^{-1}$; AMG is mesh-independent")
+    ax.legend(frameon=False, fontsize=8)
+    ax.grid(True, which="both", alpha=0.3)
+    savefig(path)
+
+
 def plot_iterations_contrast(contrasts, iters, path):
     fig, ax = plt.subplots(figsize=(5.4, 3.8))
     ax.semilogx(contrasts, iters, "o-", color=BLUE)

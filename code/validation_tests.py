@@ -61,6 +61,26 @@ def test_hand_matrix_n2():
     assert np.count_nonzero(Ad) == 12
 
 
+def test_p4_barrier_bound():
+    for n in (15, 31):
+        A, b, h, axis = assemble(n, P4, "halfpoint")
+        X, _ = np.meshgrid(axis, axis, indexing="ij")
+        phi = (X * (1.0 - X) / 2.0).ravel()
+        assert (A @ phi).min() >= 0.5 - 1e-10
+        row_sums_inv = solve_direct(A, np.ones(n * n))[0]
+        assert row_sums_inv.min() > 0.0
+        assert row_sums_inv.max() <= 0.25 + 1e-12
+
+
+def test_arithmetic_closed_form():
+    for n in (30, 62):
+        d = layered_diagnostics(n, "arithmetic")
+        h = d["h"]
+        q = (20.0 / 11.0) / (1.0 - (81.0 / 121.0) * h)
+        pred = (q - 20.0 / 11.0) * (0.5 - h / 2.0)
+        assert abs(d["Linf"] - pred) < 3e-3 * pred, (d["Linf"], pred)
+
+
 def test_fem1d_element():
     Ke = element_stiffness(0.25)
     assert np.allclose(Ke, np.array([[4.0, -4.0], [-4.0, 4.0]]))
@@ -78,6 +98,8 @@ if __name__ == "__main__":
         test_layered_harmonic_nodal,
         test_layered_arithmetic_is_wrong,
         test_hand_matrix_n2,
+        test_p4_barrier_bound,
+        test_arithmetic_closed_form,
         test_fem1d_element,
     ]
     for fn in tests:

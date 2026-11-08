@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import sys
+import time
 
 import numpy as np
 
@@ -17,8 +18,10 @@ from model import FLUX_EXACT, LAYERED, P1, P2, P4, P5, u_layered
 from plots import (
     plot_convergence,
     plot_cost_accuracy,
+    plot_cost_meshes,
     plot_flux,
     plot_iterations_contrast,
+    plot_iterations_h,
     plot_layered_profile,
     plot_residual_history,
     plot_solution_contour,
@@ -28,7 +31,9 @@ from plots import (
 from solvers import (
     condition_estimate,
     residual_history_cg,
+    setup_amg,
     smallest_eigenvalue,
+    solve_amg_cg,
     solve_cg,
     solve_direct,
     symmetry_relative,
@@ -39,8 +44,23 @@ from verify import layered_diagnostics, refinement_table, truncation_discrete_l2
 
 SMOOTH_NS = (15, 31, 63, 127)
 LAYERED_NS = (30, 62, 126, 254)  # odd interval counts 31, 63, 127, 255
+COST_NS = (31, 63, 127, 255, 511)
+TOLS = (1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10)
+MATCH_REL = 1e-3
+TIMING_REPEATS = 5
 BLUE = "#1F6F8B"
 ORANGE = "#C45C26"
+NAVY = "#1B3A5F"
+
+
+def _median_wall(fn, repeats=TIMING_REPEATS):
+    """Return (last result, median wall time) over repeated calls."""
+    walls, out = [], None
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        out = fn()
+        walls.append(time.perf_counter() - t0)
+    return out, float(np.median(walls))
 
 
 def _print_table(name, rows, slopes):
@@ -213,6 +233,57 @@ def main():
         "direct_wall": wall_dir,
         "cg": list(zip(tols, cg_iters, cg_points_err)),
     }
+
+    # --- cost at matched accuracy across meshes (P4) ---
+    # Target: discrete L2 within 0.1% of the spsolve value on the same mesh.
+    # Each solver gets the loosest tolerance from TOLS that meets it.
+    # Not counted: assembly, eigenvalue estimates, plotting, interpreter start.
+    cost_rows = []
+    for n in COST_NS:
+        A, b, h, axis = assemble(n, P4, "halfpoint")
+        (uh_d, _, _), t_dir = _median_wall(lambda: solve_direct(A, b))
+        e_dir = errors(uh_d, n, h, P4)[0]
+
+        def matched(uh):
+            return abs(errors(uh, n, h, P4)[0] - e_dir) <= MATCH_REL * e_dir
+
+        tol_cg = next(t for t in TOLS if matched(solve_cg(A, b, tol=t)[0]))
+        (_, _, it_cg, _, _), t_cg = _median_wall(lambda: solve_cg(A, b, tol=tol_cg))
+
+        ml_probe = setup_amg(A)
+        tol_amg = next(t for t in TOLS if matched(solve_amg_cg(ml_probe, b, tol=t)[0]))
+        ml, t_setup = _median_wall(lambda: setup_amg(A))
+        (_, it_amg), t_amg = _median_wall(lambda: solve_amg_cg(ml, b, tol=tol_amg))
+
+        row = {
+            "n": n, "h": h, "unknowns": n * n, "L2_target": e_dir,
+            "spsolve_wall": t_dir,
+            "cg_tol": tol_cg, "cg_iters": it_cg, "cg_wall": t_cg,
+            "amg_tol": tol_amg, "amg_iters": it_amg,
+            "amg_setup_wall": t_setup, "amg_solve_wall": t_amg,
+            "amg_total_wall": t_setup + t_amg,
+        }
+        cost_rows.append(row)
+        print(f"[cost n={n}] N={n*n} L2={e_dir:.3e} | spsolve {t_dir:.4f}s | "
+              f"CG tol={tol_cg:.0e} it={it_cg} {t_cg:.4f}s | AMG-CG tol={tol_amg:.0e} "
+              f"it={it_amg} setup {t_setup:.4f}s solve {t_amg:.4f}s total {t_setup + t_amg:.4f}s")
+    results["cost_meshes"] = cost_rows
+    plot_cost_meshes(
+        [r["unknowns"] for r in cost_rows],
+        [
+            ([r["spsolve_wall"] for r in cost_rows], "spsolve (one factorisation)", "s", ORANGE, "-"),
+            ([r["cg_wall"] for r in cost_rows], "CG (unpreconditioned)", "o", BLUE, "-"),
+            ([r["amg_total_wall"] for r in cost_rows], "AMG-CG (setup + solve)", "^", NAVY, "-"),
+            ([r["amg_solve_wall"] for r in cost_rows], "AMG-CG (solve only)", "^", NAVY, ":"),
+        ],
+        FIG / "fig12_cost_meshes.png",
+    )
+    plot_iterations_h(
+        [r["h"] for r in cost_rows],
+        [r["cg_iters"] for r in cost_rows],
+        [r["amg_iters"] for r in cost_rows],
+        FIG / "fig13_iterations_h.png",
+    )
 
     # --- contrast vs CG iterations (layered, harmonic, n=30) ---
     contrasts = [2.0, 10.0, 50.0, 200.0]
