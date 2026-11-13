@@ -24,7 +24,7 @@ python code/run_all.py
 
 `scikit-fem` is optional: it is an independent 2D P1 oracle for the smooth P4 problem. The project method is FDM.
 
-Cost measure is **CG iteration count** (residual stop) or **one sparse factorisation** for `spsolve`. Wall time is secondary and is not the headline cost.
+Cost measure in the report is **wall time at matched discrete \(L^2\)** (within \(0.1\%\) of `spsolve`), with CG / AMG-CG iteration counts as the hardware-independent secondary measure. Seminar slides live in `slides/` locally and are not on GitHub.
 
 ## Reproduce each figure
 
