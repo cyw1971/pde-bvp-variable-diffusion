@@ -22,11 +22,10 @@ from plots import (
     plot_flux,
     plot_iterations_contrast,
     plot_iterations_h,
-    plot_layered_profile,
     plot_residual_history,
-    plot_solution_contour,
     plot_solution_surface,
     plot_spy,
+    plot_two_surfaces,
 )
 from solvers import (
     condition_estimate,
@@ -89,6 +88,11 @@ def main():
     e2, einf, _ = errors(uh, 15, h, P2)
     print(f"[P2] n=15 Linf={einf:.3e} residual={res:.3e}")
     results["P2_Linf"] = einf
+    plot_solution_surface(
+        uh, 15, FIG / "fig01_p2_surface.png",
+        r"P2 gate: $u_h=x^2-y^2$ (exact on this quadratic), $n=15$",
+        zlabel=r"$u_h$",
+    )
 
     A, b, h, axis = assemble(15, P5, "halfpoint")
     uh, res, wall = solve_direct(A, b)
@@ -96,6 +100,11 @@ def main():
     centre = float(uh[mid * 15 + mid])
     print(f"[P5] centre={centre:.6f} residual={res:.3e}")
     results["P5_centre"] = centre
+    plot_solution_surface(
+        uh, 15, FIG / "fig14_p5_surface.png",
+        r"P5 gate: $u_h=e^x\sin(\pi y)$, $n=15$, centre $u_h(1/2,1/2)=1.652$",
+        zlabel=r"$u_h$",
+    )
 
     # --- smooth P4 MMS ---
     rows_p4, slopes_p4 = refinement_table(SMOOTH_NS, P4, "halfpoint")
@@ -110,10 +119,11 @@ def main():
         ],
     }
     uh15 = rows_p4[0]["uh"]
-    plot_solution_contour(uh15, 15, FIG / "fig01_smooth_contour.png",
-                          r"P4: $u_h$ on $n=15$ (indexing='ij', axis 0 is $x$)")
-    plot_solution_surface(uh15, 15, FIG / "fig02_smooth_surface.png",
-                          r"P4 manufactured solution, $n=15$")
+    plot_solution_surface(
+        uh15, 15, FIG / "fig02_smooth_surface.png",
+        r"P4 manufactured: $a=1+x$, $u_h=\sin(\pi x)\sin(\pi y)$, $n=15$",
+        zlabel=r"$u_h$", zlim=(0.0, 1.0),
+    )
     plot_spy(rows_p4[0]["A"], FIG / "fig03_spy.png")
     hs = [r["h"] for r in rows_p4]
     plot_convergence(
@@ -159,15 +169,21 @@ def main():
     results["layered_harmonic"] = [_lite(d) for d in layered_h]
     results["layered_arithmetic"] = [_lite(d) for d in layered_a]
 
-    d_show = layered_h[1]  # n=62
-    d_show_a = layered_a[1]
-    plot_layered_profile(
-        d_show["axis"],
-        d_show["uh"],
-        d_show["n"],
-        FIG / "fig06_layered_profile.png",
-        u_layered,
-        uh_arith=d_show_a["uh"],
+    d_show = layered_h[0]  # n=30, odd N=31 so the kink is visible
+    d_show_a = layered_a[0]
+    plot_two_surfaces(
+        d_show["uh"], r"Harmonic $u_h$ ($x$, $y$ both shown)",
+        d_show_a["uh"], r"Arithmetic $u_h$ ($x$, $y$ both shown)",
+        d_show["n"], FIG / "fig06_layered_surfaces.png",
+        zlabel=r"$u_h$", zlim=(0.0, 1.0), interface=True,
+    )
+    axis, X, Y, h_g = grid_from_n(d_show["n"])
+    U_a = reshape_field(d_show_a["uh"], d_show["n"])
+    U_ex = u_layered(X, Y)
+    plot_solution_surface(
+        (U_a - U_ex).ravel(), d_show["n"], FIG / "fig15_layered_arith_error.png",
+        r"Arithmetic error $u_h-u^*$: ridge along $x=1/2$, larger near $y=0,1$",
+        zlabel=r"$u_h-u^*$", interface=True, cmap="coolwarm",
     )
     plot_flux(d_show["axis"], d_show["flux"], d_show_a["flux"],
               FIG / "fig07_layered_flux.png")

@@ -32,11 +32,13 @@ All figures are written by `python code/run_all.py` into `figures/`:
 
 | File | Claim |
 |---|---|
-| `fig01_smooth_contour.png` | P4 field + mesh, `indexing='ij'` |
-| `fig02_smooth_surface.png` | P4 surface |
+| `fig01_p2_surface.png` | P2 gate \(x^2-y^2\) as a surface on \((x,y)\) |
+| `fig02_smooth_surface.png` | P4 manufactured \(u_h\) as a surface |
+| `fig14_p5_surface.png` | P5 gate \(e^x\sin(\pi y)\) as a surface |
 | `fig03_spy.png` | sparsity after Dirichlet elimination |
 | `fig04_order_smooth.png` | P4 log-log order 2 |
-| `fig06_layered_profile.png` | harmonic \(u_h\) vs exact profile |
+| `fig06_layered_surfaces.png` | harmonic vs arithmetic \(u_h\) as 3D fields |
+| `fig15_layered_arith_error.png` | arithmetic error ridge along \(x=1/2\) |
 | `fig07_layered_flux.png` | interface flux, harmonic vs arithmetic |
 | `fig08_order_layered.png` | layered \(L^\infty\) vs \(h\) |
 | `fig09_cg_residual.png` | CG residual history |

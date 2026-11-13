@@ -373,11 +373,12 @@ Cost measure (named before it is quoted): wall-clock solve time to a matched dis
 \subsection{Verification: Method of Manufactured Solutions}
 The bank's finite-difference self-check on \(f=-\nabla\cdot(a\nabla u^*)\) passes with worst relative error \(5.8\times 10^{-6}\) (analytic data check, not a solver test)~\cite{problemPack}.
 Sign and boundary gates come first: P2 (\(u^*=x^2-y^2\)) has \(L^\infty=4.4\times 10^{-16}\) at \(n=15\) (exact on this quadratic); P5 recovers the Tutorial~5 centre \(u_h(0.5,0.5)=1.652\).
+Figure~\ref{fig:gates} shows those two fields in \((x,y,u_h)\); both axes are drawn so the gate is not a 1D slice.
 
 Table~\ref{tab:p4} is the P4 refinement study.
 Named norms: discrete \(L^2\) given by \(h\|u_h-u^*\|_2\), and \(\|u_h-u^*\|_\infty\).
 Both fitted log-log slopes on \(n=15,31,63,127\) are \(2.00\) (standard error of the fit \(<10^{-3}\)).
-Figure~\ref{fig:order} plots that table; Figure~\ref{fig:field} shows the field and mesh; Figure~\ref{fig:spy} shows the sparsity pattern after elimination.
+Figure~\ref{fig:order} plots that table; Figure~\ref{fig:field} is the P4 field as a surface; Figure~\ref{fig:spy} shows the sparsity pattern after elimination.
 
 \begin{table}[H]
 \centering
@@ -415,15 +416,22 @@ Figure~\ref{fig:order} plots that table; Figure~\ref{fig:field} shows the field 
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\linewidth]{fig01_smooth_contour.png}
-  \caption{Filled contours with interior nodes (\(n=15\)).}
+  \includegraphics[width=\linewidth]{fig01_p2_surface.png}
+  \caption{P2, \(u_h=x^2-y^2\), \(n=15\).}
 \end{subfigure}\hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\linewidth]{fig02_smooth_surface.png}
-  \caption{Surface plot of \(u_h\).}
+  \includegraphics[width=\linewidth]{fig14_p5_surface.png}
+  \caption{P5, \(u_h=e^x\sin(\pi y)\), \(n=15\).}
 \end{subfigure}
-\caption{P4 solution at \(n=15\). Mesh convention: \texttt{indexing='ij'}, axis \(0\) is \(x\). Contours show the field the mesh actually resolved.}
+\caption{Bank gates as surfaces on \((x,y)\). P2 is the quadratic sign check (nodally exact). P5 is the Tutorial~5 non-zero Dirichlet check; the centre is \(u_h(1/2,1/2)=1.652\).}
+\label{fig:gates}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{fig02_smooth_surface.png}
+\caption{P4 manufactured field at \(n=15\): \(a=1+x\), \(u_h\) approximates \(\sin(\pi x)\sin(\pi y)\). Height is \(u_h\); both \(x\) and \(y\) are labelled. Mesh convention: \texttt{indexing='ij'}, axis \(0\) is \(x\).}
 \label{fig:field}
 \end{figure}
 
@@ -529,18 +537,25 @@ Value of the comparison: it separates algebraic structure (symmetry, SPD) from i
 
 \begin{figure}[H]
 \centering
+\includegraphics[width=\linewidth]{fig06_layered_surfaces.png}
+\caption{Layered \(u_h\) at \(n=30\) as surfaces over \((x,y)\). Left: harmonic mean; the kink is the plane \(x=1/2\) and the field is independent of \(y\). Right: arithmetic mean, same colour scale \([0,1]\). The two face rules are compared on the full square, not on a single mid-line.}
+\label{fig:profile}
+\end{figure}
+
+\begin{figure}[H]
+\centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\linewidth]{fig06_layered_profile.png}
-  \caption{Profile along \(y\approx 0.5\).}
+  \includegraphics[width=\linewidth]{fig15_layered_arith_error.png}
+  \caption{Arithmetic error \(u_h-u^*\).}
 \end{subfigure}\hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
   \includegraphics[width=\linewidth]{fig07_layered_flux.png}
   \caption{Interface flux versus \(y\).}
 \end{subfigure}
-\caption{Left: harmonic \(u_h\) (blue circles) and arithmetic \(u_h\) (orange dashed) against the exact piecewise-linear profile; the kink at \(x=1/2\) sits between columns. Right: interface flux versus \(y\). The dashed line is the exact flux \(20/11\); harmonic sits on it, while arithmetic is offset by \(\mathcal{O}(h)\) in the interior and by \(\approx 0.66\) in the rows next to \(y=0,1\).}
-\label{fig:profile}
+\caption{Where the arithmetic rule fails in \((x,y)\). Left: error ridge along the interface \(x=1/2\), larger near \(y=0\) and \(y=1\). Right: numerical flux \(a_E(U_R-U_L)/h\) along that same vertical face; harmonic sits on \(20/11\), arithmetic is offset by \(\mathcal{O}(h)\) in the interior and by \(\approx 0.66\) in the rows next to \(y=0,1\).}
+\label{fig:flux}
 \end{figure}
 
 \begin{figure}[H]

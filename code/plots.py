@@ -20,31 +20,59 @@ def savefig(path):
     plt.close()
 
 
-def plot_solution_contour(uh, n, path, title, cbar_label=r"$u_h$"):
+def _style_surface(ax, zlabel, zmin=None, zmax=None, interface=False):
+    ax.set_xlabel(r"$x$", labelpad=6)
+    ax.set_ylabel(r"$y$", labelpad=6)
+    ax.set_zlabel(zlabel, labelpad=6)
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(0.0, 1.0)
+    ax.set_xticks([0.0, 0.5, 1.0])
+    ax.set_yticks([0.0, 0.5, 1.0])
+    ax.view_init(elev=22, azim=-60)
+    if zmin is not None and zmax is not None:
+        ax.set_zlim(zmin, zmax)
+        if interface:
+            yy = np.linspace(0.0, 1.0, 6)
+            zz = np.linspace(zmin, zmax, 6)
+            Yp, Zp = np.meshgrid(yy, zz)
+            ax.plot_surface(np.full_like(Yp, 0.5), Yp, Zp, color="0.55",
+                            alpha=0.28, linewidth=0, shade=False)
+
+
+def plot_solution_surface(uh, n, path, title, zlabel=r"$u_h$", zlim=None,
+                          interface=False, cmap="viridis"):
+    """3D field on the unit square: height is the unknown, both $x$ and $y$ visible."""
     axis, X, Y, h = grid_from_n(n)
     U = reshape_field(uh, n)
-    fig, ax = plt.subplots(figsize=(5.2, 4.4))
-    cf = ax.contourf(X, Y, U, levels=16, cmap="viridis")
-    ax.plot(X.ravel(), Y.ravel(), ".", color="k", markersize=1.2, alpha=0.35)
-    ax.set_aspect("equal")
-    ax.set_xlabel(r"$x$")
-    ax.set_ylabel(r"$y$")
+    fig = plt.figure(figsize=(5.8, 4.6))
+    ax = fig.add_subplot(111, projection="3d")
+    surf = ax.plot_surface(X, Y, U, cmap=cmap, linewidth=0, antialiased=True,
+                           rstride=1, cstride=1)
+    zmin, zmax = (zlim if zlim is not None else (float(U.min()), float(U.max())))
+    pad = 0.04 * (zmax - zmin + 1e-15)
+    _style_surface(ax, zlabel, zmin - pad, zmax + pad, interface=interface)
     ax.set_title(title)
-    fig.colorbar(cf, ax=ax, label=cbar_label)
+    fig.colorbar(surf, ax=ax, shrink=0.65, pad=0.08, label=zlabel)
     savefig(path)
 
 
-def plot_solution_surface(uh, n, path, title):
+def plot_two_surfaces(uh_left, title_left, uh_right, title_right, n, path,
+                      zlabel=r"$u_h$", zlim=(0.0, 1.0), interface=True):
+    """Side-by-side 3D fields with a shared $z$-scale (harmonic vs arithmetic)."""
     axis, X, Y, h = grid_from_n(n)
-    U = reshape_field(uh, n)
-    fig = plt.figure(figsize=(5.6, 4.4))
-    ax = fig.add_subplot(111, projection="3d")
-    surf = ax.plot_surface(X, Y, U, cmap="viridis", linewidth=0, antialiased=True)
-    ax.set_xlabel(r"$x$")
-    ax.set_ylabel(r"$y$")
-    ax.set_zlabel(r"$u_h$")
-    ax.set_title(title)
-    fig.colorbar(surf, ax=ax, shrink=0.7, label=r"$u_h$")
+    Ul = reshape_field(uh_left, n)
+    Ur = reshape_field(uh_right, n)
+    fig = plt.figure(figsize=(10.6, 4.6))
+    for i, (U, title) in enumerate(((Ul, title_left), (Ur, title_right)), start=1):
+        ax = fig.add_subplot(1, 2, i, projection="3d")
+        surf = ax.plot_surface(X, Y, U, cmap="viridis", linewidth=0,
+                               antialiased=True, rstride=1, cstride=1,
+                               vmin=zlim[0], vmax=zlim[1])
+        _style_surface(ax, zlabel, zlim[0], zlim[1], interface=interface)
+        ax.set_title(title)
+        if i == 2:
+            fig.colorbar(surf, ax=ax, shrink=0.7, pad=0.08, label=zlabel)
+    fig.tight_layout()
     savefig(path)
 
 
